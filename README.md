@@ -1,149 +1,206 @@
-# Digital Forensics using IEEE 1149.1 (JTAG)
-> **Course:** Fault Diagnosis and Design for Testability — Lab Paper  
-> **Target Device:** Raspberry Pi 3 (Broadcom BCM2837)
+**Curs: Fault Diagnosis and Design for Testability — Lab Paper**
+**Topic: Digital Forensics using IEEE 1149.1 (JTAG)**
 
 ---
 
-## Overview
+## What this project does
 
-IEEE 1149.1, commonly known as **JTAG** (Joint Test Action Group), is a hardware interface standard originally designed for board-level testing of digital circuits. It provides direct access to a device's internal logic through a dedicated 4-wire serial interface (TDI, TDO, TCK, TMS).
+This project implements a **software simulation of a JTAG-based digital
+forensics acquisition tool**. It models the IEEE 1149.1 TAP (Test Access
+Port) controller, a simulated target device (based on a Raspberry Pi 3 /
+BCM2837-class SoC), and a forensic extraction tool that uses the TAP state
+machine to halt the CPU, read its registers, dump its memory and scan the
+dump for recoverable artifacts (credentials, keys, process info).
 
-In a **digital forensics** context, JTAG is valuable because it allows an investigator to:
-- Halt a running CPU without touching the OS
-- Read raw memory (RAM, flash) directly from hardware
-- Bypass software-level security (locked bootloaders, encrypted storage keys in RAM)
-- Extract a full memory image even from a powered-on, uncooperative device
-
-This makes it a critical low-level acquisition technique when traditional software forensics tools fail.
-
----
-
-## Hardware Setup
-
-| Component | Details |
-|---|---|
-| Target device | Raspberry Pi 3 Model B (BCM2837 SoC, ARM Cortex-A53) |
-| JTAG adapter | USB FT2232H-based adapter (e.g. Olimex ARM-USB-OCD-H) |
-| Software | OpenOCD 0.12.0, GDB 13, binwalk, xxd |
-| Host OS | Linux (Ubuntu 22.04) |
-
-### JTAG Pin Connections (BCM2837)
-
-| JTAG Signal | RPi 3 GPIO Pin | Physical Pin |
-|---|---|---|
-| TCK | GPIO 25 | Pin 22 |
-| TMS | GPIO 27 | Pin 13 |
-| TDI | GPIO 26 | Pin 37 |
-| TDO | GPIO 24 | Pin 18 |
-| GND | GND | Pin 6 |
-
-> **Note:** JTAG is disabled by default on the Pi 3. It must be enabled by adding `enable_jtag_gpio=1` to `/boot/config.txt`.
+No physical hardware is required to demonstrate the acquisition workflow:
+every step (TAP state transitions, halt request, register read, memory
+dump, artifact scan) follows the exact protocol logic used by real JTAG
+debug probes and forensic tools such as OpenOCD, just modeled in Python.
 
 ---
 
-## Forensic Acquisition Process
+## Why JTAG matters for digital forensics
 
-### 1. Connect and Initialize
+IEEE 1149.1 (JTAG) was designed for board-level testing, but it also gives
+an investigator low-level, OS-independent access to a device's internal
+state. Because JTAG operates below the operating system, it can:
 
-Launch OpenOCD with the appropriate interface and target config:
+- Halt the CPU without the OS being aware
+- Read raw memory directly from silicon, including data an attacker or
+  suspect never intended to expose (cached passwords, session keys,
+  process artifacts)
+- Bypass user-level security in cases where physical access is available
+  but software-level extraction is blocked
 
-```bash
-openocd -f interface/ftdi/ft2232h.cfg -f target/bcm2835.cfg
+This makes it a critical acquisition technique when standard forensic
+software tools cannot reach the data.
+
+---
+
+## Project structure
+
 ```
-
-Expected output:
-Open On-Chip Debugger 0.12.0
-Info : JTAG tap: bcm2835.cpu tap/device found: 0x07b7617f
-Info : bcm2835.cpu: hardware has 6 breakpoints, 4 watchpoints
-
-
-### 2. Halt the CPU
-
-Connect via telnet and issue a halt:
-
-```bash
-telnet localhost 4444
-```
-
-halt
-target halted in ARM state due to debug-request, current mode: Supervisor
-pc: 0xc0a8f3bc cpsr: 0x600001d3
-
-
-Halting freezes the CPU in place — memory contents are preserved exactly as they were at the moment of acquisition.
-
-### 3. Dump RAM
-
-Extract 64KB starting from the kernel base address:
-
-```bash
-dump_image ram_dump.bin 0xc0000000 0x10000
-```
-
-For a broader acquisition (full 1GB RAM — takes several minutes):
-
-```bash
-dump_image full_ram.bin 0x00000000 0x40000000
-```
-
-### 4. Inspect the Dump
-
-Search for human-readable artifacts (passwords, tokens, keys):
-
-```bash
-strings ram_dump.bin | grep -i "password\|token\|key\|ssh"
-```
-
-Inspect raw hex for known file headers:
-
-```bash
-xxd ram_dump.bin | head -50
-```
-
-Use binwalk to detect embedded files or firmware structures:
-
-```bash
-binwalk ram_dump.bin
+jtag_forensics_tool/
+├── main.py                — runs all acquisition scenarios
+├── tap_controller.py      — IEEE 1149.1 TAP state machine (16 states)
+├── target_device.py       — simulated target: registers, memory, secrets
+├── forensic_extractor.py  — the "tool": halt, dump, scan for artifacts
+├── reporter.py            — saves JSON acquisition reports
+└── README.md              — this file
 ```
 
 ---
 
-## What Can Be Recovered
+## How the TAP controller works
 
-Through JTAG-based memory acquisition on a Raspberry Pi 3, the following forensic artifacts are accessible:
+The `TAPController` class implements the 16-state finite state machine
+defined by IEEE 1149.1. The controller is always in exactly one state, and
+moves to a new state only when a clock pulse (TCK) is applied while
+holding a specific TMS (Test Mode Select) bit - 0 or 1. The `transitions`
+dictionary encodes the official state diagram: for each state, it defines
+where TMS=0 and TMS=1 lead.
 
-- **Encryption keys** held in RAM (e.g. LUKS volume keys, SSH session keys)
-- **Running process memory** — heap and stack contents of active processes
-- **Network credentials** — Wi-Fi passphrases, auth tokens cached in memory
-- **Firmware image** — full flash dump for offline analysis
-- **CPU register state** — program counter, stack pointer at time of halt
+Two convenience methods drive common sequences:
+
+- `goto_shift_dr()` - sends TMS bits `1, 0, 0` from Run-Test/Idle, landing
+  in **Shift-DR**, the state used to shift actual data (memory/register
+  values) in or out
+- `goto_shift_ir()` - sends TMS bits `1, 1, 0, 0` from Run-Test/Idle,
+  landing in **Shift-IR**, the state used to load an instruction (e.g.
+  "read memory") before data is transferred
+
+In a full real-world acquisition, the tool typically enters Shift-IR first
+to select the debug instruction, then Shift-DR to move the actual data.
+This simulation goes directly to Shift-DR for simplicity, since the
+instruction-selection step does not change the outcome being demonstrated.
+
+`reset()` reproduces the standard JTAG reset trick: holding TMS=1 for five
+clock cycles guarantees a return to Test-Logic-Reset regardless of the
+starting state, since every state's TMS=1 path eventually leads there.
+
+---
+
+## The simulated target device
+
+`TargetDevice` models a Raspberry Pi 3–class SoC (BCM2837) with:
+
+- A register file (PC, SP, R0, R1)
+- A memory array pre-loaded with random bytes plus three planted
+  forensic artifacts: a Wi-Fi credential, an SSH key fragment and a
+  running-process string
+- An optional `locked` flag, simulating a device with JTAG fused/disabled
+  (a common hardening measure on production/secure chips)
+
+---
+
+## Test scenarios
+
+| # | Scenario | Expected result |
+|---|----------|-----------------|
+| 1 | Unlocked device - full acquisition | SUCCESS, all 3 artifacts found |
+| 2 | Locked device - JTAG access denied | BLOCKED, `PermissionError` raised |
+| 3 | Large memory acquisition (16 KB) | SUCCESS, artifacts found at different offsets |
+
+---
+
+## How to run
+
+### Requirements
+- Python 3.x (no external libraries needed)
+
+### Steps
+1. Put all `.py` files in a folder, e.g. `jtag_forensics_tool`
+2. Open a terminal in that folder
+3. Run:
+```bash
+python3 main.py
+```
+
+---
+
+## Example output
+
+```
+############################################################
+ SCENARIO: Unlocked_Device_Acquisition
+############################################################
+[TAP] Resetting TAP controller...
+[TAP] State: Run-Test/Idle
+[TAP] Entering Shift-DR to access debug registers...
+[TAP] State: Shift-DR
+[DEVICE] Sending halt request via JTAG...
+[DEVICE] CPU halted. PC=0xc0008000
+[DEVICE] Register snapshot: {'PC': '0xc0008000', 'SP': '0xc03ffff0', 'R0': '0x0', 'R1': '0x1'}
+[DEVICE] Dumping memory [0:4096]...
+[DEVICE] Dump complete: 4096 bytes acquired.
+[SCAN] Searching memory dump for artifacts...
+  [FOUND] wifi_credential: WIFI_PSK=Summer2026! (offset 512)
+  [FOUND] ssh_key_fragment: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABfakekeyfragment (offset 1801)
+  [FOUND] process_info: /usr/bin/sshd running pid=812 (offset 3255)
+[DEVICE] CPU resumed. Acquisition complete.
+
+############################################################
+ SCENARIO: Locked_Device_Access_Denied
+############################################################
+[TAP] Resetting TAP controller...
+[DEVICE] Sending halt request via JTAG...
+[ERROR] JTAG access denied: device is fused/locked.
+
+============================================================
+ FINAL SUMMARY
+============================================================
+ 1. Unlocked device - full acquisition         SUCCESS
+ 2. Locked device - access denied              BLOCKED
+ 3. Large memory acquisition                   SUCCESS
+============================================================
+```
+
+---
+
+## JSON reports
+
+Each scenario produces a timestamped JSON report, e.g.
+`report_Unlocked_Device_Acquisition_20260706_100733.json`:
+
+```json
+{
+  "scenario": "Unlocked_Device_Acquisition",
+  "timestamp": "2026-07-06 10:07:33",
+  "result": {
+    "success": true,
+    "registers": {"PC": "0xc0008000", "SP": "0xc03ffff0", "R0": "0x0", "R1": "0x1"},
+    "bytes_dumped": 4096,
+    "artifacts_found": [
+      {"type": "wifi_credential", "value": "WIFI_PSK=Summer2026!", "offset": 512},
+      {"type": "ssh_key_fragment", "value": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABfakekeyfragment", "offset": 1801},
+      {"type": "process_info", "value": "/usr/bin/sshd running pid=812", "offset": 3255}
+    ]
+  }
+}
+```
+
+A raw binary dump (`dump_<scenario>.bin`) is also saved for each successful
+acquisition, mirroring the `.bin` output a real JTAG probe would produce.
 
 ---
 
 ## Limitations
 
-- JTAG must be physically enabled on the Pi 3 (not available by default)
-- Requires physical access to the device and its PCB header pins
-- Full RAM dump is slow (~30–60 min for 1GB over JTAG)
-- Some SoCs implement **JTAG fusing** (permanently disabled in production devices)
-- Volatile memory (RAM) is lost if the device is powered off before acquisition
-
----
-
-## Tools Used
-
-| Tool | Purpose |
-|---|---|
-| OpenOCD | JTAG interface control, CPU halt, memory dump |
-| GDB | Register inspection, live debugging |
-| binwalk | Firmware/binary analysis |
-| xxd | Hex dump inspection |
-| strings | ASCII artifact extraction |
+- The simulation models the JTAG protocol and forensic workflow correctly,
+  but does not drive real electrical signals or a physical chip
+- Real acquisitions must physically enable JTAG on the target (disabled by
+  default on the Raspberry Pi 3) and require a JTAG adapter (e.g. FT2232H)
+- Full RAM dumps over real JTAG hardware are much slower (minutes, not
+  milliseconds) due to the serial nature of the interface
+- Production/secure devices often permanently fuse off JTAG, which this
+  project represents through the `locked` flag
 
 ---
 
 ## References
 
-1. IEEE Std 1149.1-2013 — *IEEE Standard for Test Access Port and Boundary-Scan Architecture*
+1. IEEE Std 1149.1-2013 — *IEEE Standard for Test Access Port and
+   Boundary-Scan Architecture*
 2. OpenOCD User's Guide — https://openocd.org/doc/html/index.html
-3. Cornelissen, J. et al. — *JTAG Explained: The Embedded Engineer's Companion*, 2019
+3. Cornelissen, J. et al. — *JTAG Explained: The Embedded Engineer's
+   Companion*, 2019
