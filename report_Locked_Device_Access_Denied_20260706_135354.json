@@ -1,0 +1,8 @@
+{
+  "scenario": "Locked_Device_Access_Denied",
+  "timestamp": "2026-07-06 13:53:54",
+  "result": {
+    "success": false,
+    "reason": "JTAG access denied: device is fused/locked."
+  }
+}

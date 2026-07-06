@@ -1,0 +1,31 @@
+{
+  "scenario": "Large_Memory_Acquisition",
+  "timestamp": "2026-07-06 13:53:54",
+  "result": {
+    "success": true,
+    "registers": {
+      "PC": "0xc0008000",
+      "SP": "0xc03ffff0",
+      "R0": "0x0",
+      "R1": "0x1"
+    },
+    "bytes_dumped": 16384,
+    "artifacts_found": [
+      {
+        "type": "wifi_credential",
+        "value": "WIFI_PSK=Summer2026!�d��\b��W\u0007\ru9[������|b�h�#x\u0006 Z�\u000f�V�c��-,�e~�*����rȲs\u0012�A��z�{\u0016\u001b�U��t\u0003[�g\u001d\u0003R\u001cχ�\u0012�\r(�<����.5��,�V�Z��{>��e:קx\u000ea�g�D��݃�\u0016<\u0017\u0007Z.�S����\u0014��\u0002�p�������C~�Jq8���6~�{�k);᭶�W��gR��� ������Q��O��И��ժ�\t\u0001�8m��o�k�\">M\u001e���b\b)�e��\u000b7{Z�s�",
+        "offset": 5464
+      },
+      {
+        "type": "ssh_key_fragment",
+        "value": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABfakekeyfragment",
+        "offset": 6853
+      },
+      {
+        "type": "process_info",
+        "value": "/usr/bin/sshd running pid=812",
+        "offset": 11945
+      }
+    ]
+  }
+}

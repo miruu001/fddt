@@ -1,0 +1,31 @@
+{
+  "scenario": "Unlocked_Device_Acquisition",
+  "timestamp": "2026-07-06 13:53:54",
+  "result": {
+    "success": true,
+    "registers": {
+      "PC": "0xc0008000",
+      "SP": "0xc03ffff0",
+      "R0": "0x0",
+      "R1": "0x1"
+    },
+    "bytes_dumped": 4096,
+    "artifacts_found": [
+      {
+        "type": "wifi_credential",
+        "value": "WIFI_PSK=Summer2026!\bD%AoW��0�E�\u0003��\u001c5b�k�5�늙�2�W�k����Ă�H�/��2�����9�x�\nS�x�\u001b\ne�[\u001e&QLLy\u001fϫI�\u0016��ؑ��w�>]O�^��*�V�w\u00121�l��Y\u0018f\u0007��\"��-px�Y�zH4\u0016ȑ\\\u000fΗY�H6���\u001c*\r'Q\u0005��+\u0012�Yz\u001f��H��[�]\f�S\u00154.�LvBA�XG�ދ�Ɛ\r*���T��ٍ<�x����X�lK�D�L\f�y�\f\u000fM͗{,�\u0001_�\u001av\u0006�L�/e.\u0018��\u001e����&%\u0010��Um�\"�4oU��m��c�\\z\u0006��K�v\u0004tV`\u0001�Q!{��h���L��%�D^y\u000buFtd\u000f���h\u000b)�M�6�x$n|<��4�<�$���q�c,s�Ht�|@{",
+        "offset": 1654
+      },
+      {
+        "type": "ssh_key_fragment",
+        "value": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABfakekeyfragment",
+        "offset": 579
+      },
+      {
+        "type": "process_info",
+        "value": "/usr/bin/sshd running pid=812",
+        "offset": 1055
+      }
+    ]
+  }
+}
