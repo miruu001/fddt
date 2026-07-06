@@ -40,13 +40,18 @@ software tools cannot reach the data.
 ## Project structure
 
 ```
-jtag_forensics_tool/
-├── main.py                — runs all acquisition scenarios
-├── tap_controller.py      — IEEE 1149.1 TAP state machine (16 states)
-├── target_device.py       — simulated target: registers, memory, secrets
-├── forensic_extractor.py  — the "tool": halt, dump, scan for artifacts
-├── reporter.py            — saves JSON acquisition reports
-└── README.md              — this file
+- main.py                                                       - runs all acquisition scenarios
+- tap_controller.py                                             - IEEE 1149.1 TAP state machine (16 states)
+- target_device.py                                              - simulated target: registers, memory, secrets
+- forensic_extractor.py                                         - the "tool": halt, dump, scan for artifacts
+- reporter.py                                                   - saves JSON acquisition reports
+- report_Large_Memory_Acquisition_20260706_135354.json          - json report after running scenario #1
+- report_Locked_Device_Access_Denied_20260706_135354.json       - json report after running scenario #2
+- report_Unlocked_Device_Acquisition_20260706_135354.json       - json report after running scenario #3
+- Scenario - Large_Memory_Acquisition.png                       - screenshot after running scenario #1
+- Scenario - Locked_Device_Access_Denied.png                    - screenshot after running scenario #2
+- Scenario - Unlocked_Device_Acquisition.png                    - screenshot after running scenario #3
+- README.md                                                     - this file
 ```
 
 ---
